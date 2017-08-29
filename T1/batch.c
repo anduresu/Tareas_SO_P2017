@@ -3,12 +3,12 @@
 //#include <hihoqueues.h>
 #include "batch.h"
 
-struct Job
+struct job
 {
   JobFun fun;
   int done;
   void *val;
-  void input;
+  void *input;
 };
 
 nMonitor ctrl;
@@ -22,16 +22,17 @@ void startBatch(int n)
   waiting = MakeFifoQueue();
 }
 
-void stopBatch(){
-    ...}
+void stopBatch()
+{
+}
 
 Job *submitJob(JobFun fun, void *input)
 {
   Job *job = (Job *)nMalloc(sizeof(Job));
-  Job->fun = &fun;
-  Job->done = FALSE;
-  Job->input = input
-      nEnter(ctrl);
+  job->fun = fun;
+  job->done = FALSE;
+  job->input = input;
+  nEnter(ctrl);
   PutObj(waiting, job);
   nNotifyAll(ctrl);
   nExit(ctrl);
@@ -57,7 +58,7 @@ int runJobs(int n)
   for (;;)
   {
     int k = 0, i;
-    JobFun *jfun_vec[n];
+    JobFun jfun_vec[n];
     Job *job_vec[n];
     nEnter(ctrl);
     while (EmptyFifoQueue(waiting))
@@ -74,7 +75,7 @@ int runJobs(int n)
 
     for (int j = 0; j < k; j++)
     {
-      job_vec[j]->val = *jfun_vec[k](job_vec[j]->input);
+      job_vec[j]->val = (jfun_vec[k])(job_vec[j]->input);
     }
 
     nEnter(ctrl);
