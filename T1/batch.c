@@ -13,13 +13,13 @@ struct job
 
 nMonitor ctrl;
 nTask jobTask;
-FifoQueue *waiting;
+FifoQueue waiting;
 
 void startBatch(int n)
 {
   ctrl = nMakeMonitor();
-  jobTask = nEmitTask(runJobs);
   waiting = MakeFifoQueue();
+  jobTask = nEmitTask(runJobs);
 }
 
 void stopBatch()
@@ -28,7 +28,8 @@ void stopBatch()
 
 Job *submitJob(JobFun fun, void *input)
 {
-  Job *job = (Job *)nMalloc(sizeof(Job));
+  Job *job;
+  job = nMalloc(sizeof(Job));
   job->fun = fun;
   job->done = FALSE;
   job->input = input;
@@ -58,8 +59,7 @@ int runJobs(int n)
   for (;;)
   {
     int k = 0, i;
-    JobFun jfun_vec[n];
-    Job *job_vec[n];
+    Job **job_vec = (Job **)nMalloc(n * sizeof(Job *));
     nEnter(ctrl);
     while (EmptyFifoQueue(waiting))
     {
@@ -68,23 +68,21 @@ int runJobs(int n)
     while (!EmptyFifoQueue(waiting) && k < n)
     {
       job_vec[k] = (Job *)GetObj(waiting);
-      jfun_vec[k] = job_vec[k]->fun;
       k++;
     }
     nExit(ctrl);
-
     for (int j = 0; j < k; j++)
     {
-      job_vec[j]->val = (jfun_vec[k])(job_vec[j]->input);
+      job_vec[j]->val = (job_vec[j]->fun)(job_vec[j]->input);
     }
-
     nEnter(ctrl);
-    for (i = 0; i < n; i++)
+    for (i = 0; i < k; i++)
     {
       job_vec[i]->done = TRUE;
     }
     nNotifyAll(ctrl);
     nExit(ctrl);
+    nFree(job_vec);
   }
   return 0;
 }
