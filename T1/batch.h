@@ -7,5 +7,4 @@ void stopBatch();
 
 Job *submitJob(JobFun fun, void *ptr);
 void *waitJob(Job *job);
-int runJobs(int n);
 

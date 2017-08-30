@@ -11,30 +11,56 @@ struct job
   void *input;
 };
 
-nMonitor ctrl;
-nTask jobTask;
-FifoQueue waiting;
+nMonitor ctrl = NULL;
+nTask *jobTask = NULL;
+FifoQueue queue = NULL;
+int size = 0;
+int submitted = 0;
+int waiting = 0;
+int stop = FALSE;
+
+int runFun();
 
 void startBatch(int n)
 {
+  submitted = 0;
+  waiting = 0;
+  stop = FALSE;
   ctrl = nMakeMonitor();
-  waiting = MakeFifoQueue();
-  jobTask = nEmitTask(runJobs);
+  queue = MakeFifoQueue();
+  jobTask = nMalloc(n * sizeof(nTask));
+  size = n;
+  for (int i = 0; i < n; i++)
+    jobTask[i] = nEmitTask(runFun);
 }
 
 void stopBatch()
 {
+  nEnter(ctrl);
+
+  while (waiting < submitted)
+  {
+    nWait(ctrl);
+  }
+  stop = TRUE;
+  nNotifyAll(ctrl);
+  nExit(ctrl);
+  for (int i = 0; i < size; i++)
+  {
+    nWaitTask(jobTask[i]);
+  }
+  //nFree(jobTask);
 }
 
 Job *submitJob(JobFun fun, void *input)
 {
-  Job *job;
-  job = nMalloc(sizeof(Job));
+  Job *job = nMalloc(sizeof(Job));
   job->fun = fun;
   job->done = FALSE;
   job->input = input;
   nEnter(ctrl);
-  PutObj(waiting, job);
+  PutObj(queue, job);
+  submitted++;
   nNotifyAll(ctrl);
   nExit(ctrl);
   return job;
@@ -43,6 +69,8 @@ Job *submitJob(JobFun fun, void *input)
 void *waitJob(Job *job)
 {
   nEnter(ctrl);
+  waiting++;
+  nNotifyAll(ctrl);
   while (!job->done)
   {
     nWait(ctrl);
@@ -54,35 +82,30 @@ void *waitJob(Job *job)
 // Ademas necesitara una funcion para el cuerpo de los n threads del sistema
 // batch
 
-int runJobs(int n)
+int runFun()
 {
+
   for (;;)
   {
-    int k = 0, i;
-    Job **job_vec = (Job **)nMalloc(n * sizeof(Job *));
+    Job *jb = NULL;
     nEnter(ctrl);
-    while (EmptyFifoQueue(waiting))
+    while (EmptyFifoQueue(queue) && !stop)
     {
       nWait(ctrl);
     }
-    while (!EmptyFifoQueue(waiting) && k < n)
+    if (EmptyFifoQueue(queue) && stop)
     {
-      job_vec[k] = (Job *)GetObj(waiting);
-      k++;
+      nExit(ctrl);
+      break;
     }
+
+    jb = (Job *)GetObj(queue);
     nExit(ctrl);
-    for (int j = 0; j < k; j++)
-    {
-      job_vec[j]->val = (job_vec[j]->fun)(job_vec[j]->input);
-    }
+    jb->val = (jb->fun)(jb->input);
+    jb->done = TRUE;
     nEnter(ctrl);
-    for (i = 0; i < k; i++)
-    {
-      job_vec[i]->done = TRUE;
-    }
     nNotifyAll(ctrl);
     nExit(ctrl);
-    nFree(job_vec);
   }
   return 0;
 }
