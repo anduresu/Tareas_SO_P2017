@@ -11,43 +11,55 @@ struct job
   void *input;
 };
 
-nMonitor ctrl = NULL;
-nTask *jobTask = NULL;
-FifoQueue queue = NULL;
-int size = 0;
-int submitted = 0;
-int waiting = 0;
-int stop = FALSE;
+typedef struct
+{
+  nMonitor m;
+  nTask *jTask;
+  FifoQueue q;
+  int size;
+  int submitted;
+  int waiting;
+  int stop;
+} Ctrl;
 
 int runFun();
 
+Ctrl *makeCtrl(int n)
+{
+  Ctrl *c = nMalloc(sizeof(*c));
+  c->m = nMakeMonitor();
+  c->jTask = nMalloc(n * sizeof(nTask));
+  c->q = MakeFifoQueue();
+  c->size = n;
+  c->submitted = 0;
+  c->waiting = 0;
+  c->stop = FALSE;
+  return c;
+}
+
+Ctrl *ctrl;
+
 void startBatch(int n)
 {
-  submitted = 0;
-  waiting = 0;
-  stop = FALSE;
-  ctrl = nMakeMonitor();
-  queue = MakeFifoQueue();
-  jobTask = nMalloc(n * sizeof(nTask));
-  size = n;
+  ctrl = makeCtrl(n);
   for (int i = 0; i < n; i++)
-    jobTask[i] = nEmitTask(runFun);
+    (ctrl->jTask)[i] = nEmitTask(runFun);
 }
 
 void stopBatch()
 {
-  nEnter(ctrl);
+  nEnter(ctrl->m);
 
-  while (waiting < submitted)
+  while (ctrl->waiting < ctrl->submitted)
   {
-    nWait(ctrl);
+    nWait(ctrl->m);
   }
-  stop = TRUE;
-  nNotifyAll(ctrl);
-  nExit(ctrl);
-  for (int i = 0; i < size; i++)
+  ctrl->stop = TRUE;
+  nNotifyAll(ctrl->m);
+  nExit(ctrl->m);
+  for (int i = 0; i < ctrl->size; i++)
   {
-    nWaitTask(jobTask[i]);
+    nWaitTask((ctrl->jTask)[i]);
   }
   //nFree(jobTask);
 }
@@ -58,24 +70,24 @@ Job *submitJob(JobFun fun, void *input)
   job->fun = fun;
   job->done = FALSE;
   job->input = input;
-  nEnter(ctrl);
-  PutObj(queue, job);
-  submitted++;
-  nNotifyAll(ctrl);
-  nExit(ctrl);
+  nEnter(ctrl->m);
+  PutObj(ctrl->q, job);
+  ctrl->submitted++;
+  nNotifyAll(ctrl->m);
+  nExit(ctrl->m);
   return job;
 }
 
 void *waitJob(Job *job)
 {
-  nEnter(ctrl);
-  waiting++;
-  nNotifyAll(ctrl);
+  nEnter(ctrl->m);
+  ctrl->waiting++;
+  nNotifyAll(ctrl->m);
   while (!job->done)
   {
-    nWait(ctrl);
+    nWait(ctrl->m);
   }
-  nExit(ctrl);
+  nExit(ctrl->m);
   return job->val;
 }
 
@@ -88,24 +100,24 @@ int runFun()
   for (;;)
   {
     Job *jb = NULL;
-    nEnter(ctrl);
-    while (EmptyFifoQueue(queue) && !stop)
+    nEnter(ctrl->m);
+    while (EmptyFifoQueue(ctrl->q) && !ctrl->stop)
     {
-      nWait(ctrl);
+      nWait(ctrl->m);
     }
-    if (EmptyFifoQueue(queue) && stop)
+    if (EmptyFifoQueue(ctrl->q) && ctrl->stop)
     {
-      nExit(ctrl);
+      nExit(ctrl->m);
       break;
     }
 
-    jb = (Job *)GetObj(queue);
-    nExit(ctrl);
+    jb = (Job *)GetObj(ctrl->q);
+    nExit(ctrl->m);
     jb->val = (jb->fun)(jb->input);
     jb->done = TRUE;
-    nEnter(ctrl);
-    nNotifyAll(ctrl);
-    nExit(ctrl);
+    nEnter(ctrl->m);
+    nNotifyAll(ctrl->m);
+    nExit(ctrl->m);
   }
   return 0;
 }
