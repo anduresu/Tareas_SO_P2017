@@ -1,0 +1,28 @@
+
+En esta tarea Ud. debe realizar las siguientes modificaciones a nSystem.
+
+--- Cambiar include/nSystem.h -------------
+
+Reemplace el archivo include/nSystem.h por el suministrado en el
+directorio Reemplazar.
+
+--- cambiar src/Makefile ------------------
+
+Reemplace el archivo src/Makefile por el suministrado en el
+directorio Reemplazar.
+
+--- Agregar el archivo src/nLRLock.c ---------------
+
+En nLRLock.c Ud. debe definir la estructura nLRLock y programar los
+procedimientos de la API de los left/right locks.  Se incluye la plantilla
+nLRLock.c.tmpl a partir de la cual construir nLRLock.c.
+
+======================================
+
+Pruebe su implementacion con testlrlock.c.
+Use el Makefile adjunto para compilar testlrlock.c.
+No olvide definir la variable de ambiente NSYSTEM como se indica en el Makefile.
+
+Ud. puede hacer todas las modificaciones que estime pertinentes para hacer
+la depuracion de la tarea, pero no olvide que su tarea sera probada con
+la version original de este archivo.
