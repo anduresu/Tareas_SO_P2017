@@ -17,18 +17,23 @@ typedef struct
 
 #include "nSystem.h"
 
-static void ReadyFirstTask(FifoQueue queue)
+static void ReadyFirstTask(FifoQueue queue, nTask task)
 {
-  nTask task = (nTask)GetObj(queue);
-  if (task != NULL)
+  if (task->has_timeout){
+    nPrintf("Has timeout");
+    DeleteObj(queue,task);
+    CancelTask(task);
+  }
+
+  if ((task->status != READY) && (!QueryTask(ready_queue, task)))
   {
-    //CancelTask(task);
-    nPrintf("tn: %s \n",task->taskname);
+    nPrintf("task is half:%d \n",task->is_half_lock);
+    nPrintf("tn: %s \n", task->taskname);
+    if (QueryObj(queue, task))
+      nPrintf("En cola \n");
     task->status = READY;
     PushTask(ready_queue, task);
-      
-    }
-  
+  }
 }
 
 nLRLock nMakeLeftRightLock()
@@ -43,20 +48,23 @@ int nHalfLock(nLRLock l, int timeout)
 {
   START_CRITICAL();
   int output;
-  current_task->status = WAIT_TASK;
-  PushObj(l->wqueue, current_task);
+  nTask task = current_task;
+  task->is_half_lock = 1;
+  PutObj(l->wqueue, task);
   if (l->state == CLOSED)
   {
     nPrintf("Closed state\n");
 
     if (timeout > 0)
-    {
+    { task->has_timeout = 1;
       ProgramTask(timeout);
       nPrintf("Program task end\n");
       output = NONE;
     }
     else
     {
+      task->has_timeout = 0;
+      task->status = WAIT_SEND;
       nPrintf("timeout < 0 resumeNextReady \n");
       ResumeNextReadyTask();
     }
@@ -116,7 +124,14 @@ void nHalfUnlock(nLRLock l, int side)
   nPrintf("Unlocking side: %d with state = %d \n", side, l->state);
   l->state = l->state ^ side;
   nPrintf("Ready first task, state=%d \n", l->state);
-  ReadyFirstTask(l->wqueue);
+  nTask task = (nTask)GetObj(l->wqueue);
+  if (task != NULL)
+  {
+    if (task->is_half_lock == 1 || l->state == OPEN)
+    {
+      ReadyFirstTask(l->wqueue, task);
+    }
+  }
   END_CRITICAL();
 }
 
@@ -124,18 +139,26 @@ int nFullLock(nLRLock l, int timeout)
 {
   START_CRITICAL();
   int output;
-  current_task->status = WAIT_TASK;
-  PutObj(l->wqueue, current_task);
+  nTask task = current_task;
+  task->is_half_lock = 0;
+  PutObj(l->wqueue, task);
 
   if (l->state == CLOSED)
   {
-    if (timeout > 0){
-    nPrintf("Full lock Closed state\n");
-    ProgramTask(timeout);
-    nPrintf("Full lock program task end\n");
-    output = FALSE;
+    if (timeout > 0)
+    {
+      task->has_timeout = 1;
+      
+      nPrintf("Full lock Closed state\n");
+      ProgramTask(timeout);
+      nPrintf("Full lock program task end\n");
+      output = FALSE;
     }
-    else {
+    else
+    { 
+      task->has_timeout = 0;
+      task->status = WAIT_SEND;
+      
       nPrintf("Full lock timeout < 0 \n");
       ResumeNextReadyTask();
     }
@@ -147,11 +170,11 @@ int nFullLock(nLRLock l, int timeout)
     }
   }
 
-  else{
-    
+  else
+  {
+
     l->state = CLOSED;
     output = TRUE;
-    
   }
   END_CRITICAL();
   return output;
@@ -161,9 +184,9 @@ void nFullUnlock(nLRLock l)
 {
   START_CRITICAL();
   l->state = OPEN;
-  PushTask(ready_queue, current_task);
-  ReadyFirstTask(l->wqueue);
-
+  nTask task = (nTask)GetObj(l->wqueue);
+  if (task != NULL)
+    ReadyFirstTask(l->wqueue, task);
   END_CRITICAL();
 }
 

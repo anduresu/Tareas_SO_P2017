@@ -10,6 +10,8 @@ typedef struct Task /* Descriptor de una tarea */
 {
   int status;       /* Estado de la tarea (READY, ZOMBIE ...) */
   char *taskname;   /* Util para hacer debugging */
+  int is_half_lock;
+  int has_timeout;
 
   SP sp;            /* El stack pointer cuando esta suspendida */
   SP stack;         /* El stack */

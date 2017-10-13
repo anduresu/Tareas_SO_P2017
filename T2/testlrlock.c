@@ -82,12 +82,15 @@ int test1(int v) {
   if (v)
     nPrintf("Correcto: el candado completo no fue otorgado todavía.\n");
   nWaitTask(t1);
+  nPrintf("Wait task 1 \n");
   nWaitTask(t2);
+  nPrintf("Wait task 2 \n");
   if (!(st1==LEFT || st1==RIGHT) && !(st2==LEFT || st2==RIGHT))
     nFatalError("test1", "nHalfLock incorrectamente no entrego LEFT o RIGHT\n");
   if (st1==st2)
     nFatalError("test1", "nHalfLock incorrectamente otorgo el mismo lado\n");
   nWaitTask(t3);
+  nPrintf("Wait task 3 \n");
   if (!st3)
     nFatalError("test1", "nFullLock incorrectamente no entrego verdadero\n");
   if (v)
